@@ -2,25 +2,32 @@ import { createContext, useContext, useState, useMemo, useEffect, useCallback } 
 
 const AppContext = createContext()
 
+// Default data for initial load
+// Note: balance is now calculated from transactions, not stored
+const defaultPockets = [
+  { id: 1, name: 'Cash', color: 'blue', icon: '💵', category: 'Assets' },
+  { id: 2, name: 'Investments', color: 'green', icon: '📈', category: 'Public Markets' },
+  { id: 3, name: 'Credit Cards', color: 'red', icon: '💳', category: 'Other' },
+  { id: 4, name: 'Bills', color: 'orange', icon: '📋', category: 'Other' },
+  { id: 5, name: 'Maintenance', color: 'purple', icon: '🔧', category: 'Other' },
+]
+
+const defaultTransactions = [
+  { id: 1, type: 'expense', name: 'Netflix', amount: 15.99, date: '2024-01-15', icon: '🎬', pocketId: 3 },
+  { id: 2, type: 'expense', name: 'ATM Withdrawal', amount: 200, date: '2024-01-14', icon: '🏧', pocketId: 1 },
+  { id: 3, type: 'income', name: 'Salary', amount: 5000, date: '2024-01-10', icon: '💰', pocketId: 1 },
+  { id: 4, type: 'expense', name: 'QR Pay - Coffee', amount: 4.50, date: '2024-01-13', icon: '☕', pocketId: 3 },
+  { id: 5, type: 'expense', name: 'Investment Return', amount: 1250, date: '2024-01-12', icon: '📊', pocketId: 2 },
+]
+
 export function AppProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    // Load user from localStorage or use empty object
-    try {
-      const saved = localStorage.getItem('pulse_user')
-      if (saved) {
-        return JSON.parse(saved)
-      }
-    } catch (error) {
-      console.error('Error loading user from localStorage:', error)
-    }
-    return {}
-  })
+  const [user, setUser] = useState({ name: 'Daniel' })
   const [currency, setCurrency] = useState(() => {
     const saved = localStorage.getItem('currency')
     return saved || 'USD'
   })
 
-  // Load pockets from localStorage or start with empty array
+  // Load pockets from localStorage or use defaults
   const [pockets, setPockets] = useState(() => {
     try {
       const saved = localStorage.getItem('pulse_pockets')
@@ -35,10 +42,10 @@ export function AppProvider({ children }) {
     } catch (error) {
       console.error('Error loading pockets from localStorage:', error)
     }
-    return []
+    return defaultPockets
   })
 
-  // Load transactions from localStorage or start with empty array
+  // Load transactions from localStorage or use defaults
   const [transactions, setTransactions] = useState(() => {
     try {
       const saved = localStorage.getItem('pulse_transactions')
@@ -51,20 +58,24 @@ export function AppProvider({ children }) {
             ? Math.abs(transaction.amount) 
             : Math.abs(parseFloat(transaction.amount) || 0)
           
-          // Ensure pocketId exists - if not, assign to first pocket if available, or null
+          // Ensure pocketId exists - if not, try to infer from legacy mapping or assign to first pocket
           let pocketId = transaction.pocketId
           if (pocketId === undefined || pocketId === null) {
-            // If no pocketId, we'll need to handle this in the UI
-            // For now, set to null and let the UI handle it
-            pocketId = null
+            // Legacy transaction ID mapping (only for old default transactions)
+            const legacyMapping = {
+              1: 3, // Netflix -> Credit Cards
+              2: 1, // ATM Withdrawal -> Cash
+              3: 1, // Salary -> Cash
+              4: 3, // QR Pay -> Credit Cards
+              5: 2, // Investment Return -> Investments
+            }
+            pocketId = legacyMapping[transaction.id] || 1 // Default to first pocket if unknown
           }
           
           return {
             ...transaction,
             amount,
-            pocketId: pocketId !== null && pocketId !== undefined
-              ? (typeof pocketId === 'string' ? parseInt(pocketId, 10) : pocketId)
-              : null,
+            pocketId: typeof pocketId === 'string' ? parseInt(pocketId, 10) : pocketId,
           }
         })
         
@@ -75,17 +86,8 @@ export function AppProvider({ children }) {
     } catch (error) {
       console.error('Error loading transactions from localStorage:', error)
     }
-    return []
+    return defaultTransactions
   })
-
-  // Save user to localStorage whenever it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem('pulse_user', JSON.stringify(user))
-    } catch (error) {
-      console.error('Error saving user to localStorage:', error)
-    }
-  }, [user])
 
   // Save currency to localStorage whenever it changes
   useEffect(() => {
@@ -173,18 +175,6 @@ export function AppProvider({ children }) {
   }, [pockets, getPocketBalance])
 
   const addTransaction = (transaction) => {
-    // Ensure pocketId is provided - transactions require a pocket
-    let pocketId = transaction.pocketId
-    if (pocketId === undefined || pocketId === null) {
-      // If no pocketId provided and we have pockets, use the first one
-      if (pockets && pockets.length > 0) {
-        pocketId = pockets[0].id
-      } else {
-        console.warn('Cannot add transaction: No pocketId provided and no pockets exist')
-        return // Don't add transaction if no pocket exists
-      }
-    }
-    
     const newTransaction = {
       id: Date.now(),
       ...transaction,
@@ -195,7 +185,9 @@ export function AppProvider({ children }) {
         ? Math.abs(transaction.amount) 
         : Math.abs(parseFloat(transaction.amount) || 0),
       // Ensure pocketId is a number
-      pocketId: typeof pocketId === 'string' ? parseInt(pocketId, 10) : pocketId,
+      pocketId: transaction.pocketId !== undefined && transaction.pocketId !== null
+        ? (typeof transaction.pocketId === 'string' ? parseInt(transaction.pocketId, 10) : transaction.pocketId)
+        : 1, // Default to first pocket if missing
     }
     setTransactions(prev => [newTransaction, ...prev])
     // Balance is now calculated from transactions, no need to update pocket balance
