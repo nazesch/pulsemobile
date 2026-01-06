@@ -1,7 +1,8 @@
 import { useApp } from '../context/AppContext'
 import Card from '../components/Card'
 import Button from '../components/Button'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { exportData, downloadDataFile, validateImportedData, readJsonFile } from '../utils/dataExport'
 
 // Modern line icons
 const ProfileIcon = () => (
@@ -61,13 +62,135 @@ const CurrencyIcon = () => (
   </svg>
 )
 
+const ExportIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+)
+
+const ImportIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+)
+
 export default function Account() {
-  const { user, currency, setCurrency } = useApp()
+  const { 
+    user, 
+    currency, 
+    setCurrency, 
+    pockets, 
+    transactions, 
+    setPockets, 
+    setTransactions,
+    setUser 
+  } = useApp()
   const [showCurrencyModal, setShowCurrencyModal] = useState(false)
+  const [notification, setNotification] = useState(null)
+  const fileInputRef = useRef(null)
 
   const handleLogout = () => {
     localStorage.removeItem('isOnboarded')
     window.location.reload()
+  }
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type })
+    setTimeout(() => setNotification(null), 3000)
+  }
+
+  const handleExport = () => {
+    try {
+      const dataToExport = {
+        pockets,
+        transactions,
+        user,
+        currency,
+      }
+      const jsonString = exportData(dataToExport)
+      downloadDataFile(jsonString)
+      showNotification('Data exported successfully!', 'success')
+    } catch (error) {
+      console.error('Export error:', error)
+      showNotification('Failed to export data. Please try again.', 'error')
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImport = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      // Read and parse the file
+      const importedData = await readJsonFile(file)
+      
+      // Validate the data
+      const validation = validateImportedData(importedData)
+      if (!validation.valid) {
+        showNotification(validation.error || 'Invalid backup file.', 'error')
+        return
+      }
+
+      // Confirm before importing (destructive action)
+      const confirmed = window.confirm(
+        'Importing data will replace your current data. Are you sure you want to continue?'
+      )
+      if (!confirmed) {
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
+
+      // Import the data
+      const { data } = validation
+      
+      if (data.pockets && Array.isArray(data.pockets)) {
+        setPockets(data.pockets)
+        localStorage.setItem('pulse_pockets', JSON.stringify(data.pockets))
+      }
+      
+      if (data.transactions && Array.isArray(data.transactions)) {
+        setTransactions(data.transactions)
+        localStorage.setItem('pulse_transactions', JSON.stringify(data.transactions))
+      }
+      
+      if (data.user) {
+        setUser(data.user)
+      }
+      
+      if (data.currency) {
+        setCurrency(data.currency)
+        localStorage.setItem('currency', data.currency)
+      }
+
+      if (data.settings?.isOnboarded !== undefined) {
+        localStorage.setItem('isOnboarded', String(data.settings.isOnboarded))
+      }
+
+      showNotification('Data imported successfully!', 'success')
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    } catch (error) {
+      console.error('Import error:', error)
+      showNotification(error.message || 'Failed to import data. Please check the file format.', 'error')
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
   }
 
   const accountOptions = [
@@ -107,7 +230,7 @@ export default function Account() {
       {/* App Settings Section */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-3 px-2">App Settings</h2>
-        <Card onClick={() => setShowCurrencyModal(true)} className="cursor-pointer">
+        <Card onClick={() => setShowCurrencyModal(true)} className="cursor-pointer mb-2">
           <div className="flex items-center space-x-4">
             <div className="text-gray-700">
               <CurrencyIcon />
@@ -121,6 +244,47 @@ export default function Account() {
             <span className="text-gray-400">→</span>
           </div>
         </Card>
+      </div>
+
+      {/* Data Management Section */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 px-2">Data Management</h2>
+        <div className="space-y-2">
+          <Card onClick={handleExport} className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="text-gray-700">
+                <ExportIcon />
+              </div>
+              <div className="flex-1">
+                <span className="font-medium text-gray-900">Export Data</span>
+                <p className="text-sm text-gray-500">Download your data as a backup file</p>
+              </div>
+              <span className="text-gray-400">→</span>
+            </div>
+          </Card>
+          
+          <Card onClick={handleImportClick} className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="text-gray-700">
+                <ImportIcon />
+              </div>
+              <div className="flex-1">
+                <span className="font-medium text-gray-900">Import Data</span>
+                <p className="text-sm text-gray-500">Restore from a backup file</p>
+              </div>
+              <span className="text-gray-400">→</span>
+            </div>
+          </Card>
+        </div>
+        
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImport}
+          className="hidden"
+        />
       </div>
 
       {/* Account Options */}
@@ -221,6 +385,30 @@ export default function Account() {
               ))}
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg transition-all ${
+          notification.type === 'success' 
+            ? 'bg-[#2d5016] text-white' 
+            : 'bg-red-600 text-white'
+        }`}>
+          <div className="flex items-center space-x-2">
+            {notification.type === 'success' ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            )}
+            <span className="font-medium">{notification.message}</span>
+          </div>
         </div>
       )}
     </div>
