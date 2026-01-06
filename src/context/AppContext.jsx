@@ -219,6 +219,10 @@ export function AppProvider({ children }) {
     setPockets(prev => prev.filter(pocket => pocket.id !== id))
   }
 
+  const deleteTransaction = (id) => {
+    setTransactions(prev => prev.filter(transaction => transaction.id !== id))
+  }
+
   const value = {
     user,
     setUser,
@@ -230,6 +234,7 @@ export function AppProvider({ children }) {
     getPocketBalance,
     addTransaction,
     updateTransaction,
+    deleteTransaction,
     updatePocket,
     addPocket,
     deletePocket,

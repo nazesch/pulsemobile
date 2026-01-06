@@ -124,8 +124,8 @@ function QuickAddForm({ onClose, onAdd }) {
       </div>
 
       <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+        <form onSubmit={handleSubmit} className="space-y-4" style={{ width: '100%', overflowX: 'hidden' }}>
+          <div style={{ width: '100%', minWidth: 0 }}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Name
             </label>
@@ -136,12 +136,13 @@ function QuickAddForm({ onClose, onAdd }) {
                 setFormData({ ...formData, name: e.target.value })
               }
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
               placeholder="e.g., Grocery Shopping"
               required
             />
           </div>
 
-          <div>
+          <div style={{ width: '100%', minWidth: 0 }}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Amount
             </label>
@@ -153,12 +154,13 @@ function QuickAddForm({ onClose, onAdd }) {
                 setFormData({ ...formData, amount: e.target.value })
               }
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
               placeholder="0.00"
               required
             />
           </div>
 
-          <div>
+          <div style={{ width: '100%', minWidth: 0 }}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Type
             </label>
@@ -168,6 +170,7 @@ function QuickAddForm({ onClose, onAdd }) {
                 setFormData({ ...formData, type: e.target.value })
               }
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
             >
               <option value="expense">Expense</option>
               <option value="income">Income</option>

@@ -1,5 +1,6 @@
 import { useApp } from '../context/AppContext'
 import Card from '../components/Card'
+import SwipeableTransaction from '../components/SwipeableTransaction'
 import { formatCurrency, convertCurrency } from '../utils/format'
 
 // Transaction type icons
@@ -50,7 +51,7 @@ const transactionIconMap = {
 }
 
 export default function Transactions() {
-  const { transactions, currency } = useApp()
+  const { transactions, currency, deleteTransaction } = useApp()
 
   const groupedTransactions = transactions.reduce((acc, transaction) => {
     const date = new Date(transaction.date).toLocaleDateString('en-US', {
@@ -103,29 +104,32 @@ export default function Transactions() {
                       ? transaction.originalAmount
                       : convertCurrency(transaction.amount, 'USD', currency)
                     return (
-                    <div
+                    <SwipeableTransaction
                       key={transaction.id}
-                      className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 last:pb-0"
+                      onDelete={() => deleteTransaction(transaction.id)}
+                      className=""
                     >
-                      <div className="flex items-center space-x-4 flex-1">
-                        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-700 flex-shrink-0">
-                          <IconComponent />
+                      <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 last:pb-0">
+                        <div className="flex items-center space-x-4 flex-1">
+                          <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-700 flex-shrink-0">
+                            <IconComponent />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">
+                              {transaction.name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {transaction.type === 'income' ? 'Income' : 'Expense'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 truncate">
-                            {transaction.name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {transaction.type === 'income' ? 'Income' : 'Expense'}
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="font-bold text-lg text-balance text-black">
+                            {formatCurrency(Math.abs(displayAmount), currency)}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0 ml-4">
-                        <p className="font-bold text-lg text-balance text-black">
-                          {formatCurrency(Math.abs(displayAmount), currency)}
-                        </p>
-                      </div>
-                    </div>
+                    </SwipeableTransaction>
                     )
                   })}
                 </div>

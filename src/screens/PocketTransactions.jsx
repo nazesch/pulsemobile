@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import Card from '../components/Card'
 import Button from '../components/Button'
+import SwipeableTransaction from '../components/SwipeableTransaction'
 import { formatCurrency, convertCurrency } from '../utils/format'
 
 // Transaction type icons
@@ -110,7 +111,7 @@ export default function PocketTransactions() {
   fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:90',message:'pocketId from params',data:{pocketId,pocketIdType:typeof pocketId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
   // #endregion
   const navigate = useNavigate()
-  const { pockets, transactions, currency, addTransaction, updateTransaction, updatePocket, deletePocket, getPocketBalance } = useApp()
+  const { pockets, transactions, currency, addTransaction, updateTransaction, deleteTransaction, updatePocket, deletePocket, getPocketBalance } = useApp()
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:93',message:'useApp hook result',data:{pocketsLength:pockets?.length,transactionsLength:transactions?.length,hasGetPocketBalance:typeof getPocketBalance==='function',pocketsType:Array.isArray(pockets),transactionsType:Array.isArray(transactions)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
   // #endregion
@@ -496,33 +497,38 @@ export default function PocketTransactions() {
                   : convertCurrency(transaction.amount, 'USD', currency)
                 return (
                   <div key={transaction.id}>
-                    <div
-                      onClick={() => handleEdit(transaction)}
-                      className="flex items-center justify-between py-4 px-4 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors"
+                    <SwipeableTransaction
+                      onDelete={() => deleteTransaction(transaction.id)}
+                      className=""
                     >
-                      <div className="flex items-center space-x-4 flex-1">
-                        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-700 flex-shrink-0">
-                          <IconComponent />
+                      <div
+                        onClick={() => handleEdit(transaction)}
+                        className="flex items-center justify-between py-4 px-4 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <div className="flex items-center space-x-4 flex-1">
+                          <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-700 flex-shrink-0">
+                            <IconComponent />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">
+                              {transaction.name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {new Date(transaction.date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 truncate">
-                            {transaction.name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(transaction.date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="font-bold text-lg text-balance text-black">
+                            {formatCurrency(Math.abs(displayAmount), currency)}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0 ml-4">
-                        <p className="font-bold text-lg text-balance text-black">
-                          {formatCurrency(Math.abs(displayAmount), currency)}
-                        </p>
-                      </div>
-                    </div>
+                    </SwipeableTransaction>
                     {index < pocketTransactions.length - 1 && (
                       <div className="border-b w-full" style={{ borderColor: '#f0f0f0' }}></div>
                     )}
@@ -537,13 +543,13 @@ export default function PocketTransactions() {
       {/* Add/Edit Transaction Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-end justify-center p-4 z-50" style={{ overflow: 'hidden' }}>
-          <Card className="w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col mb-4 rounded-t-3xl rounded-b-2xl" style={{ position: 'relative', zIndex: 50, overflowY: 'auto' }}>
+          <Card className="w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col mb-4 rounded-t-3xl rounded-b-2xl" style={{ position: 'relative', zIndex: 50, overflowY: 'auto', overflowX: 'hidden' }}>
             <h2 className="text-xl font-bold mb-4">
               {editingTransaction ? 'Edit Transaction' : 'Add Transaction'}
             </h2>
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden" style={{ maxHeight: '85vh' }}>
-              <div className="space-y-4 flex-1 overflow-y-auto pr-2" style={{ maxHeight: 'calc(85vh - 120px)' }}>
-              <div>
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden" style={{ maxHeight: '85vh', width: '100%' }}>
+              <div className="space-y-4 flex-1 overflow-y-auto pr-2" style={{ maxHeight: 'calc(85vh - 120px)', width: '100%', overflowX: 'hidden' }}>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Name
                 </label>
@@ -554,12 +560,13 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, name: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   placeholder="e.g., Grocery Shopping"
                   required
                 />
               </div>
 
-              <div>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Status
                 </label>
@@ -569,6 +576,7 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, status: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   required
                 >
                   {statuses.map((status) => (
@@ -579,7 +587,7 @@ export default function PocketTransactions() {
                 </select>
               </div>
 
-              <div>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Source
                 </label>
@@ -589,6 +597,7 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, source: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   required
                 >
                   {sources.map((source) => (
@@ -599,7 +608,7 @@ export default function PocketTransactions() {
                 </select>
               </div>
 
-              <div>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Amount
                 </label>
@@ -611,12 +620,13 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, amount: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   placeholder="0.00"
                   required
                 />
               </div>
 
-              <div>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Currency
                 </label>
@@ -626,6 +636,7 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, currency: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   required
                 >
                   {currencies.map((curr) => (
@@ -636,7 +647,7 @@ export default function PocketTransactions() {
                 </select>
               </div>
 
-              <div className="relative">
+              <div className="relative" style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date
                 </label>
@@ -647,12 +658,12 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, date: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ position: 'relative', zIndex: 1 }}
+                  style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
                   required
                 />
               </div>
 
-              <div>
+              <div style={{ width: '100%', minWidth: 0 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description <span className="text-gray-400 text-xs">(Optional)</span>
                 </label>
@@ -662,6 +673,7 @@ export default function PocketTransactions() {
                     setFormData({ ...formData, description: e.target.value })
                   }
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', resize: 'vertical' }}
                   placeholder="Add a description..."
                   rows="3"
                 />
