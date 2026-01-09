@@ -615,15 +615,34 @@ export default function PocketTransactions() {
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
+                  inputMode="decimal"
                   value={formData.amount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, amount: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                  onChange={(e) => {
+                    let value = e.target.value
+                    // Allow empty string, numbers, and one decimal point
+                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                      setFormData({ ...formData, amount: value })
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Format to 2 decimal places when user leaves the field
+                    const value = e.target.value
+                    if (value && !isNaN(parseFloat(value))) {
+                      const formatted = parseFloat(value).toFixed(2)
+                      setFormData({ ...formData, amount: formatted })
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-lg"
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', letterSpacing: '0.5px' }}
                   placeholder="0.00"
                   required
                 />
+                {formData.amount && !isNaN(parseFloat(formData.amount)) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {parseFloat(formData.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
               </div>
 
               <div style={{ width: '100%', minWidth: 0 }}>
