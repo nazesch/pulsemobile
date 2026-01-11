@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true, // Listen on all addresses
-    port: 5173,
+    port: 5174, // Changed to avoid conflict with other project
   },
 })
 

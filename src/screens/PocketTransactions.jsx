@@ -5,6 +5,7 @@ import Card from '../components/Card'
 import Button from '../components/Button'
 import SwipeableTransaction from '../components/SwipeableTransaction'
 import { formatCurrency, convertCurrency } from '../utils/format'
+import { TOP_20_CRYPTO, fetchCryptoPrice, convertCryptoToUSD } from '../utils/crypto'
 
 // Transaction type icons
 const NetflixIcon = () => (
@@ -116,10 +117,22 @@ export default function PocketTransactions() {
   fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:93',message:'useApp hook result',data:{pocketsLength:pockets?.length,transactionsLength:transactions?.length,hasGetPocketBalance:typeof getPocketBalance==='function',pocketsType:Array.isArray(pockets),transactionsType:Array.isArray(transactions)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
   // #endregion
   
-  // Scroll to top when component mounts or pocketId changes
-  useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [pocketId])
+  const statuses = ['Paid', 'Pending', 'Due']
+  const sources = ['Fuse', 'Bancolombia', 'Revolut', 'ABN', 'Bunq', 'Wise', 'Trade Republic', 'AMEX', 'Global66', 'Cash']
+  const currencies = ['COP', 'USD', 'EUR']
+
+  const pocketIdNum = parseInt(pocketId, 10)
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:117',message:'Before pocket lookup',data:{pocketIdNum,isNaN:isNaN(pocketIdNum),pocketsLength:pockets?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  // Find pocket with flexible ID matching (handle both string and number IDs)
+  const pocket = pockets.find(p => {
+    const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id
+    return pId === pocketIdNum
+  })
+  
+  // Check if current pocket is Crypto category (must be after pocket is defined)
+  const isCryptoPocket = pocket?.category === 'Crypto'
   
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
@@ -136,20 +149,50 @@ export default function PocketTransactions() {
     description: '',
     icon: '🏧',
   })
-
-  const statuses = ['Paid', 'Pending', 'Due']
-  const sources = ['Fuse', 'Bancolombia', 'Revolut', 'ABN', 'Bunq', 'Wise', 'Trade Republic', 'AMEX', 'Global66', 'Cash']
-  const currencies = ['COP', 'USD', 'EUR']
-
-  const pocketIdNum = parseInt(pocketId, 10)
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:117',message:'Before pocket lookup',data:{pocketIdNum,isNaN:isNaN(pocketIdNum),pocketsLength:pockets?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
-  // Find pocket with flexible ID matching (handle both string and number IDs)
-  const pocket = pockets.find(p => {
-    const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id
-    return pId === pocketIdNum
+  
+  // Crypto-specific form state
+  const [cryptoFormData, setCryptoFormData] = useState({
+    cryptoAsset: 'BTC',
+    cryptoAmount: '',
+    usdAmount: 0,
   })
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false)
+  const [priceError, setPriceError] = useState(null)
+  
+  // Scroll to top when component mounts or pocketId changes
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pocketId])
+
+  // Fetch crypto price when asset or amount changes
+  useEffect(() => {
+    // Only run if pocket is loaded and is a crypto pocket
+    if (!pocket) return
+    
+    if (isCryptoPocket && cryptoFormData.cryptoAsset && cryptoFormData.cryptoAmount) {
+      const amount = parseFloat(cryptoFormData.cryptoAmount)
+      if (!isNaN(amount) && amount > 0) {
+        setIsLoadingPrice(true)
+        setPriceError(null)
+        convertCryptoToUSD(amount, cryptoFormData.cryptoAsset)
+          .then(usdAmount => {
+            setCryptoFormData(prev => ({ ...prev, usdAmount }))
+            setIsLoadingPrice(false)
+          })
+          .catch(error => {
+            console.error('Error fetching crypto price:', error)
+            setPriceError('Failed to fetch price. Please try again.')
+            setIsLoadingPrice(false)
+            setCryptoFormData(prev => ({ ...prev, usdAmount: 0 }))
+          })
+      } else {
+        setCryptoFormData(prev => ({ ...prev, usdAmount: 0 }))
+      }
+    } else if (!isCryptoPocket) {
+      // Reset crypto form data if not a crypto pocket
+      setCryptoFormData(prev => ({ ...prev, usdAmount: 0 }))
+    }
+  }, [cryptoFormData.cryptoAsset, cryptoFormData.cryptoAmount, isCryptoPocket, pocket])
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/cf5b3080-7cbe-407c-bc05-9619da1a765a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PocketTransactions.jsx:123',message:'After pocket lookup',data:{pocketFound:!!pocket,pocketId:pocket?.id,pocketName:pocket?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
   // #endregion
@@ -190,70 +233,151 @@ export default function PocketTransactions() {
     pocketBalance = 0
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (formData.name && formData.amount) {
-      const amount = parseFloat(formData.amount)
-      // Store the original amount in the original currency to preserve precision
-      // Also store USD equivalent for balance calculations
-      const originalAmount = Math.abs(amount)
-      const amountInUSD = convertCurrency(originalAmount, formData.currency, 'USD')
-      const transactionData = {
-        name: formData.name,
-        status: formData.status,
-        source: formData.source,
-        amount: amountInUSD, // USD equivalent for balance calculations
-        originalAmount: originalAmount, // Original amount entered by user
-        originalCurrency: formData.currency, // Original currency entered by user
-        currency: formData.currency, // Keep for backward compatibility
-        date: formData.date,
-        description: formData.description || '',
-        icon: '🏧',
-        pocketId: editingTransaction?.pocketId !== undefined 
-          ? (typeof editingTransaction.pocketId === 'string' ? parseInt(editingTransaction.pocketId, 10) : editingTransaction.pocketId)
-          : pocketIdNum, // Preserve existing pocketId or use current pocket
-      }
+    
+    if (isCryptoPocket) {
+      // Handle crypto transaction
+      if (cryptoFormData.cryptoAsset && cryptoFormData.cryptoAmount) {
+        const cryptoAmount = parseFloat(cryptoFormData.cryptoAmount)
+        if (!isNaN(cryptoAmount) && cryptoAmount > 0) {
+          const usdAmount = cryptoFormData.usdAmount || await convertCryptoToUSD(cryptoAmount, cryptoFormData.cryptoAsset)
+          
+          const transactionData = {
+            name: `${cryptoFormData.cryptoAsset} Holdings`,
+            status: 'Paid',
+            source: 'Crypto Wallet',
+            amount: usdAmount, // USD equivalent for balance calculations
+            originalAmount: cryptoAmount, // Original crypto amount
+            originalCurrency: cryptoFormData.cryptoAsset, // Crypto code
+            currency: 'USD', // Always USD for crypto
+            date: formData.date,
+            description: `${cryptoAmount} ${cryptoFormData.cryptoAsset}`,
+            icon: '💎',
+            cryptoAsset: cryptoFormData.cryptoAsset,
+            cryptoAmount: cryptoAmount,
+            pocketId: editingTransaction?.pocketId !== undefined 
+              ? (typeof editingTransaction.pocketId === 'string' ? parseInt(editingTransaction.pocketId, 10) : editingTransaction.pocketId)
+              : pocketIdNum,
+          }
 
-      if (editingTransaction) {
-        updateTransaction(editingTransaction.id, transactionData)
-      } else {
-        addTransaction(transactionData)
+          if (editingTransaction) {
+            updateTransaction(editingTransaction.id, transactionData)
+          } else {
+            addTransaction(transactionData)
+          }
+          
+          // Reset forms
+          setFormData({
+            name: '',
+            status: 'Paid',
+            source: 'Cash',
+            amount: '',
+            currency: 'USD',
+            date: new Date().toISOString().split('T')[0],
+            description: '',
+            icon: '🏧',
+          })
+          setCryptoFormData({
+            cryptoAsset: 'BTC',
+            cryptoAmount: '',
+            usdAmount: 0,
+          })
+          setShowAddModal(false)
+          setEditingTransaction(null)
+          setPriceError(null)
+        }
       }
-      
-      setFormData({
-        name: '',
-        status: 'Paid',
-        source: 'Cash',
-        amount: '',
-        currency: 'USD',
-        date: new Date().toISOString().split('T')[0],
-        description: '',
-        icon: '🏧',
-      })
-      setShowAddModal(false)
-      setEditingTransaction(null)
+    } else {
+      // Handle regular transaction
+      if (formData.name && formData.amount) {
+        const amount = parseFloat(formData.amount)
+        // Store the original amount in the original currency to preserve precision
+        // Also store USD equivalent for balance calculations
+        const originalAmount = Math.abs(amount)
+        const amountInUSD = convertCurrency(originalAmount, formData.currency, 'USD')
+        const transactionData = {
+          name: formData.name,
+          status: formData.status,
+          source: formData.source,
+          amount: amountInUSD, // USD equivalent for balance calculations
+          originalAmount: originalAmount, // Original amount entered by user
+          originalCurrency: formData.currency, // Original currency entered by user
+          currency: formData.currency, // Keep for backward compatibility
+          date: formData.date,
+          description: formData.description || '',
+          icon: '🏧',
+          pocketId: editingTransaction?.pocketId !== undefined 
+            ? (typeof editingTransaction.pocketId === 'string' ? parseInt(editingTransaction.pocketId, 10) : editingTransaction.pocketId)
+            : pocketIdNum, // Preserve existing pocketId or use current pocket
+        }
+
+        if (editingTransaction) {
+          updateTransaction(editingTransaction.id, transactionData)
+        } else {
+          addTransaction(transactionData)
+        }
+        
+        setFormData({
+          name: '',
+          status: 'Paid',
+          source: 'Cash',
+          amount: '',
+          currency: 'USD',
+          date: new Date().toISOString().split('T')[0],
+          description: '',
+          icon: '🏧',
+        })
+        setShowAddModal(false)
+        setEditingTransaction(null)
+      }
     }
   }
 
   const handleEdit = (transaction) => {
     setEditingTransaction(transaction)
-    // Use original amount if stored, otherwise convert from USD
-    const originalAmount = transaction.originalAmount !== undefined
-      ? transaction.originalAmount
-      : (transaction.currency 
-          ? convertCurrency(Math.abs(transaction.amount), 'USD', transaction.currency)
-          : Math.abs(transaction.amount))
     
-    setFormData({
-      name: transaction.name || '',
-      status: transaction.status || 'Paid',
-      source: transaction.source || 'Cash',
-      amount: originalAmount.toString(),
-      currency: transaction.originalCurrency || transaction.currency || 'USD',
-      date: transaction.date || new Date().toISOString().split('T')[0],
-      description: transaction.description || '',
-      icon: transaction.icon || '🏧',
-    })
+    // Check if it's a crypto transaction
+    if (transaction.cryptoAsset && transaction.cryptoAmount !== undefined) {
+      setCryptoFormData({
+        cryptoAsset: transaction.cryptoAsset,
+        cryptoAmount: transaction.cryptoAmount.toString(),
+        usdAmount: transaction.amount || 0,
+      })
+      setFormData({
+        name: transaction.name || '',
+        status: transaction.status || 'Paid',
+        source: transaction.source || 'Crypto Wallet',
+        amount: '',
+        currency: 'USD',
+        date: transaction.date || new Date().toISOString().split('T')[0],
+        description: transaction.description || '',
+        icon: transaction.icon || '💎',
+      })
+    } else {
+      // Regular transaction
+      const originalAmount = transaction.originalAmount !== undefined
+        ? transaction.originalAmount
+        : (transaction.currency 
+            ? convertCurrency(Math.abs(transaction.amount), 'USD', transaction.currency)
+            : Math.abs(transaction.amount))
+      
+      setFormData({
+        name: transaction.name || '',
+        status: transaction.status || 'Paid',
+        source: transaction.source || 'Cash',
+        amount: originalAmount.toString(),
+        currency: transaction.originalCurrency || transaction.currency || 'USD',
+        date: transaction.date || new Date().toISOString().split('T')[0],
+        description: transaction.description || '',
+        icon: transaction.icon || '🏧',
+      })
+      setCryptoFormData({
+        cryptoAsset: 'BTC',
+        cryptoAmount: '',
+        usdAmount: 0,
+      })
+    }
     setShowAddModal(true)
   }
 
@@ -270,6 +394,12 @@ export default function PocketTransactions() {
       description: '',
       icon: '🏧',
     })
+    setCryptoFormData({
+      cryptoAsset: 'BTC',
+      cryptoAmount: '',
+      usdAmount: 0,
+    })
+    setPriceError(null)
   }
 
   const handleRename = () => {
@@ -303,7 +433,14 @@ export default function PocketTransactions() {
     // #endregion
     return (
       <div className="min-h-screen px-4 pt-6 pb-24 flex items-center justify-center">
-        <p className="text-gray-500">Pocket not found</p>
+        <Card>
+          <div className="text-center py-8">
+            <p className="text-gray-500 mb-4">Pocket not found</p>
+            <Button onClick={() => navigate('/pockets')} variant="primary">
+              Back to Pockets
+            </Button>
+          </div>
+        </Card>
       </div>
     )
   }
@@ -444,6 +581,12 @@ export default function PocketTransactions() {
                 description: '',
                 icon: '🏧',
               })
+              setCryptoFormData({
+                cryptoAsset: 'BTC',
+                cryptoAmount: '',
+                usdAmount: 0,
+              })
+              setPriceError(null)
               setShowAddModal(true)
             }}
             variant="primary"
@@ -549,154 +692,245 @@ export default function PocketTransactions() {
             </h2>
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden" style={{ maxHeight: '85vh', width: '100%' }}>
               <div className="space-y-4 flex-1 overflow-y-auto pr-2" style={{ maxHeight: 'calc(85vh - 120px)', width: '100%', overflowX: 'hidden' }}>
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-                  placeholder="e.g., Grocery Shopping"
-                  required
-                />
-              </div>
+              {isCryptoPocket ? (
+                // Crypto-specific form fields
+                <>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Crypto Asset
+                    </label>
+                    <select
+                      value={cryptoFormData.cryptoAsset}
+                      onChange={(e) => {
+                        setCryptoFormData({ ...cryptoFormData, cryptoAsset: e.target.value, usdAmount: 0 })
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    >
+                      {TOP_20_CRYPTO.map((crypto) => (
+                        <option key={crypto.code} value={crypto.code}>
+                          {crypto.name} ({crypto.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) =>
-                    setFormData({ ...formData, status: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-                  required
-                >
-                  {statuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount ({cryptoFormData.cryptoAsset})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.00000001"
+                      min="0"
+                      inputMode="decimal"
+                      value={cryptoFormData.cryptoAmount}
+                      onChange={(e) => {
+                        let value = e.target.value
+                        // Allow empty string, numbers, and one decimal point
+                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                          setCryptoFormData({ ...cryptoFormData, cryptoAmount: value })
+                        }
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-lg"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', letterSpacing: '0.5px' }}
+                      placeholder="0.00000000"
+                      required
+                    />
+                    {isLoadingPrice && (
+                      <p className="text-xs text-gray-500 mt-1">Fetching price...</p>
+                    )}
+                    {priceError && (
+                      <p className="text-xs text-red-500 mt-1">{priceError}</p>
+                    )}
+                  </div>
 
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Source
-                </label>
-                <select
-                  value={formData.source}
-                  onChange={(e) =>
-                    setFormData({ ...formData, source: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-                  required
-                >
-                  {sources.map((source) => (
-                    <option key={source} value={source}>
-                      {source}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      USD Value
+                    </label>
+                    <div className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-gray-50 font-mono text-lg font-bold text-gray-900" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', letterSpacing: '0.5px' }}>
+                      {cryptoFormData.usdAmount > 0 
+                        ? formatCurrency(cryptoFormData.usdAmount, 'USD')
+                        : '$0.00'}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {cryptoFormData.cryptoAmount && !isNaN(parseFloat(cryptoFormData.cryptoAmount)) && cryptoFormData.usdAmount > 0
+                        ? `1 ${cryptoFormData.cryptoAsset} = ${formatCurrency(cryptoFormData.usdAmount / parseFloat(cryptoFormData.cryptoAmount), 'USD')}`
+                        : 'Enter amount to see USD value'}
+                    </p>
+                  </div>
 
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  value={formData.amount}
-                  onChange={(e) => {
-                    let value = e.target.value
-                    // Allow empty string, numbers, and one decimal point
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      setFormData({ ...formData, amount: value })
-                    }
-                  }}
-                  onBlur={(e) => {
-                    // Format to 2 decimal places when user leaves the field
-                    const value = e.target.value
-                    if (value && !isNaN(parseFloat(value))) {
-                      const formatted = parseFloat(value).toFixed(2)
-                      setFormData({ ...formData, amount: formatted })
-                    }
-                  }}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-lg"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', letterSpacing: '0.5px' }}
-                  placeholder="0.00"
-                  required
-                />
-                {formData.amount && !isNaN(parseFloat(formData.amount)) && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {parseFloat(formData.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                )}
-              </div>
+                  <div className="relative" style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) =>
+                        setFormData({ ...formData, date: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    />
+                  </div>
+                </>
+              ) : (
+                // Regular transaction form fields
+                <>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      placeholder="e.g., Grocery Shopping"
+                      required
+                    />
+                  </div>
 
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Currency
-                </label>
-                <select
-                  value={formData.currency}
-                  onChange={(e) =>
-                    setFormData({ ...formData, currency: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-                  required
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr} value={curr}>
-                      {curr}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) =>
+                        setFormData({ ...formData, status: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    >
+                      {statuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="relative" style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-                  required
-                />
-              </div>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Source
+                    </label>
+                    <select
+                      value={formData.source}
+                      onChange={(e) =>
+                        setFormData({ ...formData, source: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    >
+                      {sources.map((source) => (
+                        <option key={source} value={source}>
+                          {source}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description <span className="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', resize: 'vertical' }}
-                  placeholder="Add a description..."
-                  rows="3"
-                />
-              </div>
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      value={formData.amount}
+                      onChange={(e) => {
+                        let value = e.target.value
+                        // Allow empty string, numbers, and one decimal point
+                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                          setFormData({ ...formData, amount: value })
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Format to 2 decimal places when user leaves the field
+                        const value = e.target.value
+                        if (value && !isNaN(parseFloat(value))) {
+                          const formatted = parseFloat(value).toFixed(2)
+                          setFormData({ ...formData, amount: formatted })
+                        }
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-lg"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', letterSpacing: '0.5px' }}
+                      placeholder="0.00"
+                      required
+                    />
+                    {formData.amount && !isNaN(parseFloat(formData.amount)) && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {parseFloat(formData.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
+
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Currency
+                    </label>
+                    <select
+                      value={formData.currency}
+                      onChange={(e) =>
+                        setFormData({ ...formData, currency: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    >
+                      {currencies.map((curr) => (
+                        <option key={curr} value={curr}>
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative" style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) =>
+                        setFormData({ ...formData, date: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ width: '100%', minWidth: 0 }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({ ...formData, description: e.target.value })
+                      }
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                      placeholder="Add a description..."
+                      rows="3"
+                    />
+                  </div>
+                </>
+              )}
               </div>
               <div className="flex space-x-2 pt-4 mt-4 border-t border-gray-200">
                 <Button
