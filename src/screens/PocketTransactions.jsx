@@ -721,16 +721,33 @@ export default function PocketTransactions() {
                       Amount ({cryptoFormData.cryptoAsset})
                     </label>
                     <input
-                      type="number"
-                      step="0.00000001"
-                      min="0"
+                      type="text"
                       inputMode="decimal"
                       value={cryptoFormData.cryptoAmount}
                       onChange={(e) => {
                         let value = e.target.value
-                        // Allow empty string, numbers, and one decimal point
-                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                          setCryptoFormData({ ...cryptoFormData, cryptoAmount: value })
+                        // Allow empty string, numbers, decimal point, and numbers starting with decimal point (e.g., .5)
+                        // Pattern allows: empty, digits, .digits, digits.digits, .digits
+                        if (value === '' || /^\.?\d*\.?\d*$/.test(value)) {
+                          // Prevent multiple decimal points
+                          const decimalCount = (value.match(/\./g) || []).length
+                          if (decimalCount <= 1) {
+                            setCryptoFormData({ ...cryptoFormData, cryptoAmount: value })
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Format the value when user leaves the field
+                        const value = e.target.value.trim()
+                        if (value === '' || value === '.') {
+                          setCryptoFormData({ ...cryptoFormData, cryptoAmount: '' })
+                        } else if (!isNaN(parseFloat(value)) && parseFloat(value) >= 0) {
+                          // Keep the value as is, but ensure it's a valid number
+                          const numValue = parseFloat(value)
+                          if (!isNaN(numValue)) {
+                            // Don't force formatting - keep user's precision
+                            setCryptoFormData({ ...cryptoFormData, cryptoAmount: value })
+                          }
                         }
                       }}
                       className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-lg"
