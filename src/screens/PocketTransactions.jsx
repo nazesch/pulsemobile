@@ -723,9 +723,12 @@ export default function PocketTransactions() {
                     <input
                       type="text"
                       inputMode="decimal"
+                      lang="en-US"
                       value={cryptoFormData.cryptoAmount}
                       onChange={(e) => {
                         let value = e.target.value
+                        // Replace comma with period for decimal separator (handle locale differences)
+                        value = value.replace(/,/g, '.')
                         // Allow empty string, numbers, decimal point, and numbers starting with decimal point (e.g., .5)
                         // Pattern allows: empty, digits, .digits, digits.digits, .digits
                         if (value === '' || /^\.?\d*\.?\d*$/.test(value)) {
@@ -738,7 +741,9 @@ export default function PocketTransactions() {
                       }}
                       onBlur={(e) => {
                         // Format the value when user leaves the field
-                        const value = e.target.value.trim()
+                        let value = e.target.value.trim()
+                        // Replace comma with period
+                        value = value.replace(/,/g, '.')
                         if (value === '' || value === '.') {
                           setCryptoFormData({ ...cryptoFormData, cryptoAmount: '' })
                         } else if (!isNaN(parseFloat(value)) && parseFloat(value) >= 0) {
@@ -864,9 +869,12 @@ export default function PocketTransactions() {
                     <input
                       type="text"
                       inputMode="decimal"
+                      lang="en-US"
                       value={formData.amount}
                       onChange={(e) => {
                         let value = e.target.value
+                        // Replace comma with period for decimal separator (handle locale differences)
+                        value = value.replace(/,/g, '.')
                         // Allow empty string, numbers, decimal point, and numbers starting with decimal point (e.g., .5)
                         if (value === '' || /^\.?\d*\.?\d*$/.test(value)) {
                           // Prevent multiple decimal points
@@ -878,7 +886,9 @@ export default function PocketTransactions() {
                       }}
                       onBlur={(e) => {
                         // Format to 2 decimal places when user leaves the field
-                        const value = e.target.value.trim()
+                        let value = e.target.value.trim()
+                        // Replace comma with period
+                        value = value.replace(/,/g, '.')
                         if (value === '' || value === '.') {
                           setFormData({ ...formData, amount: '' })
                         } else if (value && !isNaN(parseFloat(value)) && parseFloat(value) >= 0) {

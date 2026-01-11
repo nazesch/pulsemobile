@@ -149,9 +149,12 @@ function QuickAddForm({ onClose, onAdd }) {
             <input
               type="text"
               inputMode="decimal"
+              lang="en-US"
               value={formData.amount}
               onChange={(e) => {
                 let value = e.target.value
+                // Replace comma with period for decimal separator (handle locale differences)
+                value = value.replace(/,/g, '.')
                 // Allow empty string, numbers, decimal point, and numbers starting with decimal point (e.g., .5)
                 if (value === '' || /^\.?\d*\.?\d*$/.test(value)) {
                   // Prevent multiple decimal points
@@ -163,7 +166,9 @@ function QuickAddForm({ onClose, onAdd }) {
               }}
               onBlur={(e) => {
                 // Format to 2 decimal places when user leaves the field
-                const value = e.target.value.trim()
+                let value = e.target.value.trim()
+                // Replace comma with period
+                value = value.replace(/,/g, '.')
                 if (value === '' || value === '.') {
                   setFormData({ ...formData, amount: '' })
                 } else if (value && !isNaN(parseFloat(value)) && parseFloat(value) >= 0) {
