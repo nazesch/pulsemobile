@@ -241,8 +241,11 @@ export default function PocketTransactions() {
       if (cryptoFormData.cryptoAsset && cryptoFormData.cryptoAmount) {
         const cryptoAmount = parseFloat(cryptoFormData.cryptoAmount)
         if (!isNaN(cryptoAmount) && cryptoAmount > 0) {
-          // Always calculate USD amount - use cached value if available and valid, otherwise fetch
+          // Use the exact USD amount that's displayed in the form
+          // This ensures the saved amount matches what the user sees
           let usdAmount = cryptoFormData.usdAmount
+          
+          // Only recalculate if we don't have a valid USD amount (shouldn't happen if form is working)
           if (!usdAmount || usdAmount === 0 || isNaN(usdAmount)) {
             usdAmount = await convertCryptoToUSD(cryptoAmount, cryptoFormData.cryptoAsset)
           }
@@ -253,11 +256,15 @@ export default function PocketTransactions() {
             return
           }
           
+          // Use the exact USD amount from the form (what user sees = what gets saved)
+          // Round to 2 decimal places to match display formatting
+          const usdAmountRounded = Math.round(usdAmount * 100) / 100
+          
           const transactionData = {
             name: `${cryptoFormData.cryptoAsset} Holdings`,
             status: 'Paid',
             source: 'Crypto Wallet',
-            amount: usdAmount, // USD equivalent - this is what gets stored and displayed
+            amount: usdAmountRounded, // USD equivalent - exact value from form, rounded to match display
             originalAmount: cryptoAmount, // Original crypto amount (for reference only)
             originalCurrency: cryptoFormData.cryptoAsset, // Crypto code (for reference only)
             currency: 'USD', // Always USD for crypto
@@ -644,13 +651,18 @@ export default function PocketTransactions() {
             <div>
               {pocketTransactions.map((transaction, index) => {
                 const IconComponent = transactionIconMap[transaction.icon] || ATMIcon
-                // For crypto transactions, always use USD amount (stored in transaction.amount)
-                // For regular transactions, use original amount if currency matches, otherwise convert from USD
-                const displayAmount = transaction.cryptoAsset
-                  ? convertCurrency(transaction.amount, 'USD', currency) // Crypto: always show USD equivalent
-                  : (transaction.originalAmount !== undefined && transaction.originalCurrency === currency
+                // For crypto transactions: transaction.amount is already in USD, convert to user's currency if needed
+                // For regular transactions: use original amount if currency matches, otherwise convert from USD
+                let displayAmount
+                if (transaction.cryptoAsset) {
+                  // Crypto transaction: amount is stored in USD, convert to user's selected currency
+                  displayAmount = convertCurrency(transaction.amount, 'USD', currency)
+                } else {
+                  // Regular transaction: use original amount if currency matches, otherwise convert from USD
+                  displayAmount = transaction.originalAmount !== undefined && transaction.originalCurrency === currency
                     ? transaction.originalAmount
-                    : convertCurrency(transaction.amount, 'USD', currency))
+                    : convertCurrency(transaction.amount, 'USD', currency)
+                }
                 return (
                   <div key={transaction.id}>
                     <SwipeableTransaction
