@@ -241,21 +241,31 @@ export default function PocketTransactions() {
       if (cryptoFormData.cryptoAsset && cryptoFormData.cryptoAmount) {
         const cryptoAmount = parseFloat(cryptoFormData.cryptoAmount)
         if (!isNaN(cryptoAmount) && cryptoAmount > 0) {
-          const usdAmount = cryptoFormData.usdAmount || await convertCryptoToUSD(cryptoAmount, cryptoFormData.cryptoAsset)
+          // Always calculate USD amount - use cached value if available and valid, otherwise fetch
+          let usdAmount = cryptoFormData.usdAmount
+          if (!usdAmount || usdAmount === 0 || isNaN(usdAmount)) {
+            usdAmount = await convertCryptoToUSD(cryptoAmount, cryptoFormData.cryptoAsset)
+          }
+          
+          // Ensure we have a valid USD amount
+          if (!usdAmount || isNaN(usdAmount) || usdAmount <= 0) {
+            setPriceError('Unable to fetch crypto price. Please try again.')
+            return
+          }
           
           const transactionData = {
             name: `${cryptoFormData.cryptoAsset} Holdings`,
             status: 'Paid',
             source: 'Crypto Wallet',
-            amount: usdAmount, // USD equivalent for balance calculations
-            originalAmount: cryptoAmount, // Original crypto amount
-            originalCurrency: cryptoFormData.cryptoAsset, // Crypto code
+            amount: usdAmount, // USD equivalent - this is what gets stored and displayed
+            originalAmount: cryptoAmount, // Original crypto amount (for reference only)
+            originalCurrency: cryptoFormData.cryptoAsset, // Crypto code (for reference only)
             currency: 'USD', // Always USD for crypto
             date: formData.date,
             description: `${cryptoAmount} ${cryptoFormData.cryptoAsset}`,
             icon: '💎',
             cryptoAsset: cryptoFormData.cryptoAsset,
-            cryptoAmount: cryptoAmount,
+            cryptoAmount: cryptoAmount, // Store crypto amount for editing purposes
             pocketId: editingTransaction?.pocketId !== undefined 
               ? (typeof editingTransaction.pocketId === 'string' ? parseInt(editingTransaction.pocketId, 10) : editingTransaction.pocketId)
               : pocketIdNum,
@@ -634,10 +644,13 @@ export default function PocketTransactions() {
             <div>
               {pocketTransactions.map((transaction, index) => {
                 const IconComponent = transactionIconMap[transaction.icon] || ATMIcon
-                // Use original amount if currency matches, otherwise convert from USD
-                const displayAmount = transaction.originalAmount !== undefined && transaction.originalCurrency === currency
-                  ? transaction.originalAmount
-                  : convertCurrency(transaction.amount, 'USD', currency)
+                // For crypto transactions, always use USD amount (stored in transaction.amount)
+                // For regular transactions, use original amount if currency matches, otherwise convert from USD
+                const displayAmount = transaction.cryptoAsset
+                  ? convertCurrency(transaction.amount, 'USD', currency) // Crypto: always show USD equivalent
+                  : (transaction.originalAmount !== undefined && transaction.originalCurrency === currency
+                    ? transaction.originalAmount
+                    : convertCurrency(transaction.amount, 'USD', currency))
                 return (
                   <div key={transaction.id}>
                     <SwipeableTransaction
