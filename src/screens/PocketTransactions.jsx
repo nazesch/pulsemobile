@@ -862,22 +862,26 @@ export default function PocketTransactions() {
                       Amount
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
                       inputMode="decimal"
                       value={formData.amount}
                       onChange={(e) => {
                         let value = e.target.value
-                        // Allow empty string, numbers, and one decimal point
-                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                          setFormData({ ...formData, amount: value })
+                        // Allow empty string, numbers, decimal point, and numbers starting with decimal point (e.g., .5)
+                        if (value === '' || /^\.?\d*\.?\d*$/.test(value)) {
+                          // Prevent multiple decimal points
+                          const decimalCount = (value.match(/\./g) || []).length
+                          if (decimalCount <= 1) {
+                            setFormData({ ...formData, amount: value })
+                          }
                         }
                       }}
                       onBlur={(e) => {
                         // Format to 2 decimal places when user leaves the field
-                        const value = e.target.value
-                        if (value && !isNaN(parseFloat(value))) {
+                        const value = e.target.value.trim()
+                        if (value === '' || value === '.') {
+                          setFormData({ ...formData, amount: '' })
+                        } else if (value && !isNaN(parseFloat(value)) && parseFloat(value) >= 0) {
                           const formatted = parseFloat(value).toFixed(2)
                           setFormData({ ...formData, amount: formatted })
                         }
